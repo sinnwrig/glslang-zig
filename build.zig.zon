@@ -1,0 +1,22 @@
+.{
+    .name = "glslang",
+    .version = "0.1.0",
+    .paths = .{
+        "External",
+        "glslang",
+        "gtests",
+        "SPIRV",
+        "StandAlone",
+        "Test",
+        "build.zig",
+        "build.zig.zon",
+        ".mailmap",
+        "CHANGES.md",
+        "CODE_OF_CONDUCT.md",
+        "LICENSE.txt",
+        "README-spirv-remap.md",
+        "README.md",
+        "SECURITY.md",
+    },
+    .dependencies = .{},
+}
