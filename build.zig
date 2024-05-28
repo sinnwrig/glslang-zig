@@ -280,7 +280,7 @@ pub fn build(b: *Build) !void {
             if (build_shared) buildShared(b, lib, optimize, target);
 
             break :blk .{ .lib = lib, .lib_path = null };
-        }
+        };
     };
 
     if (skip_executables)
