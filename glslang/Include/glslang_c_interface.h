@@ -206,6 +206,9 @@ typedef struct glslang_input_s {
     glslang_target_language_version_t target_language_version;
     /** Shader source code */
     const char* code;
+    const char* entrypoint; // This is what actually gets called by the GPU. Best to leave it at 'main' or something so opengl doesn't trip over itself.
+    const char* source_entrypoint; // This just renames the source entrypoint in the code to 'entrypoint' and should be what is used to set different entrypoint names.
+    bool invert_y;
     int default_version;
     glslang_profile_t default_profile;
     int force_default_version_and_profile;

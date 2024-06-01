@@ -329,6 +329,18 @@ GLSLANG_EXPORT glslang_shader_t* glslang_shader_create(const glslang_input_t* in
     shader->shader->setEnvTarget(c_shader_target_language(input->target_language),
                                  c_shader_target_language_version(input->target_language_version));
 
+    if (input->entrypoint != nullptr)
+        shader->shader->setEntryPoint(input->entrypoint);
+
+    if (input->source_entrypoint != nullptr) {
+        if (input->entrypoint == nullptr)
+            printf("Warning: Setting source entry point name without setting an entry-point name.\n");
+
+        shader->shader->setSourceEntryPoint(input->source_entrypoint);
+    }
+
+    shader->shader->setInvertY(input->invert_y);
+
     return shader;
 }
 

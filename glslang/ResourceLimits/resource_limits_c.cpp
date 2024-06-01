@@ -32,17 +32,17 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <string.h>
 #include <string>
 
-glslang_resource_t* glslang_resource(void)
+GLSLANG_EXPORT glslang_resource_t* glslang_resource(void)
 {
     return reinterpret_cast<glslang_resource_t*>(GetResources());
 }
 
-const glslang_resource_t* glslang_default_resource(void)
+GLSLANG_EXPORT const glslang_resource_t* glslang_default_resource(void)
 {
     return reinterpret_cast<const glslang_resource_t*>(GetDefaultResources());
 }
 
-const char* glslang_default_resource_string()
+GLSLANG_EXPORT const char* glslang_default_resource_string()
 {
     std::string cpp_str = GetDefaultTBuiltInResourceString();
     char* c_str = (char*)malloc(cpp_str.length() + 1);
@@ -50,7 +50,7 @@ const char* glslang_default_resource_string()
     return c_str;
 }
 
-void glslang_decode_resource_limits(glslang_resource_t* resources, char* config)
+GLSLANG_EXPORT void glslang_decode_resource_limits(glslang_resource_t* resources, char* config)
 {
     DecodeResourceLimits(reinterpret_cast<TBuiltInResource*>(resources), config);
 }

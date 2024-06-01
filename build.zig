@@ -13,6 +13,8 @@ pub fn build(b: *Build) !void {
     const enable_hlsl = !(b.option(bool, "no-hlsl", "Skip building glslang HLSL support.") orelse false);
     const enable_opt = !(b.option(bool, "no-opt", "Skip building spirv-tools optimization.") orelse false);
     const shared_tools = b.option(bool, "shared-tools", "Build and link spirv-tools as a shared library.") orelse false;
+    const standalone_glslang = b.option(bool, "standalone", "Build glslang.exe standalone command-line compiler.") orelse false;
+    const standalone_spvremap = b.option(bool, "standalone-remap", "Build spirv-remap.exe standalone command-line remapper.") orelse false;
 
     const tools_libs: spvtools.SPVLibs = spvtools.build_spirv(b, optimize, target, shared_tools, debug) catch |err| {
         log.err("Error building SPIRV-Tools: {s}", .{ @errorName(err) });
@@ -56,20 +58,20 @@ pub fn build(b: *Build) !void {
         sources_resource_limits ++ 
         sources_c_interface;
 
-    var lib: *std.Build.Step.Compile = undefined;
+    var glslang_lib: *std.Build.Step.Compile = undefined;
 
     if (shared) {
-        lib = b.addSharedLibrary(.{
+        glslang_lib = b.addSharedLibrary(.{
             .name = "glslang",
             .root_source_file = b.addWriteFiles().add("empty.c", ""),
             .optimize = optimize,
             .target = target,
         });
 
-        lib.defineCMacro("GLSLANG_IS_SHARED_LIBRARY", "1");
-        lib.defineCMacro("GLSLANG_EXPORTING", "1");
+        glslang_lib.defineCMacro("GLSLANG_IS_SHARED_LIBRARY", "");
+        glslang_lib.defineCMacro("GLSLANG_EXPORTING", "");
     } else {
-        lib = b.addStaticLibrary(.{
+        glslang_lib = b.addStaticLibrary(.{
             .name = "glslang",
             .root_source_file = b.addWriteFiles().add("empty.c", ""),
             .optimize = optimize,
@@ -77,7 +79,7 @@ pub fn build(b: *Build) !void {
         });
     }
 
-    lib.addCSourceFiles(.{
+    glslang_lib.addCSourceFiles(.{
         .files = &sources,
         .flags = cppflags.items,
     });
@@ -85,56 +87,122 @@ pub fn build(b: *Build) !void {
     const tag = target.result.os.tag;
 
     if (tag == .windows) {
-        lib.addCSourceFiles(.{
+        glslang_lib.addCSourceFiles(.{
             .files = &sources_win,
             .flags = cppflags.items,
         });
 
-        lib.defineCMacro("GLSLANG_OSINCLUDE_WIN32", "");
+        glslang_lib.defineCMacro("GLSLANG_OSINCLUDE_WIN32", "");
     } else {
-        lib.addCSourceFiles(.{
+        glslang_lib.addCSourceFiles(.{
             .files = &sources_unix,
             .flags = cppflags.items,
         });
 
-        lib.defineCMacro("GLSLANG_OSINCLUDE_UNIX", "");
+        glslang_lib.defineCMacro("GLSLANG_OSINCLUDE_UNIX", "");
     }
 
     if (enable_hlsl) {
-        lib.addCSourceFiles(.{
+        glslang_lib.addCSourceFiles(.{
             .files = &sources_hlsl,
             .flags = cppflags.items,
         });
 
-        lib.defineCMacro("ENABLE_HLSL", "1");
+        glslang_lib.defineCMacro("ENABLE_HLSL", "1");
+    } else {
+        glslang_lib.defineCMacro("ENABLE_HLSL", "0");
     }
 
     if (enable_opt) {
-        lib.addCSourceFiles(.{
+        glslang_lib.addCSourceFiles(.{
             .files = &sources_opt,
             .flags = cppflags.items,
         });
 
-        lib.defineCMacro("ENABLE_OPT", "1");
+        glslang_lib.defineCMacro("ENABLE_OPT", "1");
 
-        lib.step.dependOn(&tools_libs.tools_opt.step);
-        lib.step.dependOn(&tools_libs.tools_val.step);
-        lib.linkLibrary(tools_libs.tools_opt);
-        lib.linkLibrary(tools_libs.tools_val);
+        glslang_lib.step.dependOn(&tools_libs.tools_opt.step);
+        glslang_lib.step.dependOn(&tools_libs.tools_val.step);
+        glslang_lib.linkLibrary(tools_libs.tools_opt);
+        glslang_lib.linkLibrary(tools_libs.tools_val);
+    } else {
+        glslang_lib.defineCMacro("ENABLE_OPT", "0");
     }
 
 
-    addIncludes(lib);
-    spvtools.addSPIRVPublicIncludes(lib);
+    addIncludes(glslang_lib);
+    spvtools.addSPIRVPublicIncludes(glslang_lib);
 
-    lib.linkLibCpp();
+    glslang_lib.linkLibCpp();
 
-    lib.step.dependOn(&build_headers.step);
+    glslang_lib.step.dependOn(&build_headers.step);
 
-    const build_step = b.step("glslang", "Build glslang");
-    build_step.dependOn(&b.addInstallArtifact(lib, .{}).step);
+    const build_step = b.step("glslang-library", "Build the glslang library");
+    build_step.dependOn(&b.addInstallArtifact(glslang_lib, .{}).step);
 
-    b.installArtifact(lib);
+    b.installArtifact(glslang_lib);
+
+    if (standalone_glslang) {
+        const glslang_exe = b.addExecutable(.{
+            .name = "glslang",
+            .optimize = optimize,
+            .target = target,
+        });
+
+        const install_glslang_step = b.step("glslang-standalone", "Build and install glslang.exe");
+        install_glslang_step.dependOn(&b.addInstallArtifact(glslang_exe, .{}).step);
+        glslang_exe.addCSourceFiles(.{
+            .files = &sources_standalone_glslang,
+            .flags = &.{ "-std=c++17" },
+        });
+
+        addIncludes(glslang_exe);
+
+        b.installArtifact(glslang_exe);
+        glslang_exe.linkLibrary(glslang_lib);
+
+        if (target.result.os.tag == .windows) {
+            // windows must be built with LTO disabled due to:
+            // https://github.com/ziglang/zig/issues/15958
+            glslang_exe.want_lto = false;
+        }
+
+        if (enable_hlsl) {
+            glslang_exe.defineCMacro("ENABLE_HLSL", "1");
+        } else {
+            glslang_exe.defineCMacro("ENABLE_HLSL", "0");
+        }
+
+        if (enable_opt) {
+            glslang_exe.defineCMacro("ENABLE_OPT", "1");
+        } else {
+            glslang_exe.defineCMacro("ENABLE_OPT", "0");
+        }
+    }
+
+    if (standalone_spvremap) {
+        const spirv_remap = b.addExecutable(.{
+            .name = "spirv-remap",
+            .optimize = optimize,
+            .target = target,
+        });
+
+        const install_remap_step = b.step("spirv-remap", "Build and install spirv-remap.exe");
+        install_remap_step.dependOn(&b.addInstallArtifact(spirv_remap, .{}).step);
+        spirv_remap.addCSourceFiles(.{
+            .files = &sources_standalone_remap,
+            .flags = &.{ "-std=c++17" },
+        });
+
+        addIncludes(spirv_remap);
+
+        b.installArtifact(spirv_remap);
+        spirv_remap.linkLibrary(glslang_lib);
+
+        if (target.result.os.tag == .windows) {
+            spirv_remap.want_lto = false;
+        }
+    }
 }
 
 fn addIncludes(step: *std.Build.Step.Compile) void {
@@ -197,8 +265,6 @@ fn runPython(allocator: std.mem.Allocator, args: []const []const u8, errMsg: []c
         std.process.exit(1);
     };
 }
-
-
 
 // ------------------------------------------
 // Include generation logic
@@ -286,7 +352,6 @@ pub const BuildHeadersStep = struct {
 };
 
 
-
 const sources_spirv = [_][]const u8{
     "SPIRV/GlslangToSpv.cpp",
     "SPIRV/InReadableOrder.cpp",
@@ -300,6 +365,7 @@ const sources_spirv = [_][]const u8{
 
 const sources_c_interface = [_][]const u8{
     "glslang/CInterface/glslang_c_interface.cpp",
+    "SPIRV/CInterface/spirv_c_interface.cpp",
 };
 
 const sources_resource_limits = [_][]const u8{
@@ -363,4 +429,12 @@ const sources_hlsl = [_][]const u8{
 
 const sources_opt = [_][]const u8{
     "SPIRV/SpvTools.cpp",
+};
+
+const sources_standalone_glslang = [_][]const u8{
+    "StandAlone/StandAlone.cpp"
+};
+
+const sources_standalone_remap = [_][]const u8{
+    "StandAlone/spirv-remap.cpp"
 };
