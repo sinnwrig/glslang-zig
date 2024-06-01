@@ -1,12 +1,21 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const spvtools = @import("External/spirv-tools/build.zig");
 const Build = std.Build;
 
 const log = std.log.scoped(.glslang_zig);
 const spirv_header_name = "spirv-headers"; // Since update_glslang_sources downloads it as spirv-headers instead of SPIRV-Headers
 
 pub fn build(b: *Build) !void {
+    _ = std.fs.openFileAbsolute(sdkPath("/External/spirv-tools/build.zig"), .{}) catch |err| {
+        if (err == error.FileNotFound) {
+            log.err("SPIRV-Tools build file was not found - ensure sources have been cloned with `./update_glslang_sources.py --site zig`/.", .{});
+        }
+
+        std.process.exit(1);
+    };
+
+    const spvtools = @import("External/spirv-tools/build.zig");
+
     const optimize = b.standardOptimizeOption(.{});
     const target = b.standardTargetOptions(.{});
     const debug = b.option(bool, "debug", "Whether to produce detailed debug symbols (g0) or not. These increase binary size considerably.") orelse false;
@@ -17,7 +26,7 @@ pub fn build(b: *Build) !void {
     const standalone_glslang = b.option(bool, "standalone", "Build glslang.exe standalone command-line compiler.") orelse false;
     const standalone_spvremap = b.option(bool, "standalone-remap", "Build spirv-remap.exe standalone command-line remapper.") orelse false;
 
-    const tools_libs: spvtools.SPVLibs = spvtools.build_spirv(b, optimize, target, shared_tools, debug, spirv_header_name) catch |err| {
+    const tools_libs: spvtools.SPVLibs = spvtools.buildSpirv(b, optimize, target, shared_tools, debug, spirv_header_name) catch |err| {
         log.err("Error building SPIRV-Tools: {s}", .{ @errorName(err) });
         std.process.exit(1);
     }; 
