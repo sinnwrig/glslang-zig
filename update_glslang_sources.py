@@ -27,12 +27,12 @@ KNOWN_GOOD_FILE = 'known_good.json'
 
 SITE_TO_KNOWN_GOOD_FILE = { 'github' : 'known_good.json',
                             'gitlab' : 'known_good_khr.json',
-                            'zig-github' : 'known_good_zig.json' }
+                            'zig' : 'known_good_zig.json' }
 
 # Maps a site name to its hostname.
 SITE_TO_HOST = { 'github' : 'https://github.com/',
                  'gitlab' : 'git@gitlab.khronos.org:',
-                 'zig-github' : 'https://github.com/' }
+                 'zig' : 'https://github.com/' }
 
 VERBOSE = True
 

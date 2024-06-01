@@ -4,6 +4,7 @@ const spvtools = @import("External/spirv-tools/build.zig");
 const Build = std.Build;
 
 const log = std.log.scoped(.glslang_zig);
+const spirv_header_name = "spirv-headers"; // Since update_glslang_sources downloads it as spirv-headers instead of SPIRV-Headers
 
 pub fn build(b: *Build) !void {
     const optimize = b.standardOptimizeOption(.{});
@@ -16,7 +17,7 @@ pub fn build(b: *Build) !void {
     const standalone_glslang = b.option(bool, "standalone", "Build glslang.exe standalone command-line compiler.") orelse false;
     const standalone_spvremap = b.option(bool, "standalone-remap", "Build spirv-remap.exe standalone command-line remapper.") orelse false;
 
-    const tools_libs: spvtools.SPVLibs = spvtools.build_spirv(b, optimize, target, shared_tools, debug) catch |err| {
+    const tools_libs: spvtools.SPVLibs = spvtools.build_spirv(b, optimize, target, shared_tools, debug, spirv_header_name) catch |err| {
         log.err("Error building SPIRV-Tools: {s}", .{ @errorName(err) });
         std.process.exit(1);
     }; 
@@ -131,7 +132,7 @@ pub fn build(b: *Build) !void {
 
 
     addIncludes(glslang_lib);
-    spvtools.addSPIRVPublicIncludes(glslang_lib);
+    spvtools.addSPIRVPublicIncludes(glslang_lib, spirv_header_name);
 
     glslang_lib.linkLibCpp();
 
