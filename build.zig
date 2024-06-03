@@ -3,26 +3,15 @@ const builtin = @import("builtin");
 const Build = std.Build;
 
 const log = std.log.scoped(.glslang_zig);
-const spirv_header_name = "spirv-headers"; // Since update_glslang_sources downloads it as spirv-headers instead of SPIRV-Headers
 
 pub fn build(b: *Build) !void {
-    _ = std.fs.openFileAbsolute(sdkPath("/External/spirv-tools/build.zig"), .{}) catch |err| {
-        if (err == error.FileNotFound) {
-            log.err("SPIRV-Tools build file was not found - ensure sources have been cloned with `./update_glslang_sources.py --site zig`/.", .{});
-        }
-
-        std.process.exit(1);
-    };
-
-    const spvtools = @import("External/spirv-tools/build.zig");
-
     const optimize = b.standardOptimizeOption(.{});
     const target = b.standardTargetOptions(.{});
     const debug = b.option(bool, "debug", "Whether to produce detailed debug symbols (g0) or not. These increase binary size considerably.") orelse false;
     const shared = b.option(bool, "shared", "Build glslang as a shared library.") orelse false;
-    const enable_hlsl = !(b.option(bool, "no-hlsl", "Skip building glslang HLSL support.") orelse false);
-    const enable_opt = !(b.option(bool, "no-opt", "Skip building spirv-tools optimization.") orelse false);
-    const shared_tools = b.option(bool, "shared-tools", "Build and link spirv-tools as a shared library.") orelse false;
+    const enable_hlsl = !(b.option(bool, "no_hlsl", "Skip building glslang HLSL support.") orelse false);
+    const enable_opt = !(b.option(bool, "no_opt", "Skip building spirv-tools optimization.") orelse false);
+    const shared_tools = b.option(bool, "shared_tools", "Build and link spirv-tools as a shared library.") orelse false;
     const standalone_glslang = b.option(bool, "standalone", "Build glslang.exe standalone command-line compiler.") orelse false;
     const standalone_spvremap = b.option(bool, "standalone-remap", "Build spirv-remap.exe standalone command-line remapper.") orelse false;
 
@@ -30,11 +19,6 @@ pub fn build(b: *Build) !void {
         log.err("Cannot build standalone sources with shared glslang. Recompile without `-Dshared` or `-Dstandalone/-Dstandalone-remap`", .{});
         std.process.exit(1);
     }
-
-    const tools_libs: spvtools.SPVLibs = spvtools.buildSpirv(b, optimize, target, shared_tools, debug, spirv_header_name) catch |err| {
-        log.err("Error building SPIRV-Tools: {s}", .{ @errorName(err) });
-        std.process.exit(1);
-    }; 
 
     const tag = target.result.os.tag;
 
@@ -71,7 +55,38 @@ pub fn build(b: *Build) !void {
 // SPIRV-Tools
 // ------------------
 
-    const build_headers = BuildHeadersStep.init(b);    
+    generateHeaders(b.allocator);
+
+    _ = std.fs.openDirAbsolute(sdkPath("/External/spirv-tools"), .{}) catch |err| {
+        if (err == error.FileNotFound) {
+            log.err("SPIRV-Tools build directory was not found - ensure sources have been cloned with `./update_glslang_sources.py --site zig`/.", .{});
+        }
+
+        std.process.exit(1);
+    };
+
+    var tools_lib: *Build.Step.Compile = undefined;
+    var tools_opt: *Build.Step.Compile = undefined;
+    var tools_val: *Build.Step.Compile = undefined;
+
+    const path: []const u8 = "external/spirv-headers";
+
+    if (b.lazyDependency("SPIRV-Tools", .{
+        .target = target,
+        .optimize = optimize,
+        .debug = debug,
+        .shared = shared_tools,
+        .header_path = path,
+    })) |dep| {
+        tools_lib = dep.artifact("SPIRV-Tools");
+        tools_opt = dep.artifact("SPIRV-Tools-opt");
+        tools_val = dep.artifact("SPIRV-Tools-val");    
+    }
+
+    if (tools_lib == undefined or tools_opt == undefined or tools_val == undefined) {
+        log.err("Error building SPIRV-Tools libraries", .{});
+        std.process.exit(1);
+    }
 
     const sources = sources_spirv ++
         sources_generic_codegen ++
@@ -132,6 +147,8 @@ pub fn build(b: *Build) !void {
         glslang_lib.defineCMacro("ENABLE_HLSL", "0");
     }
 
+    glslang_lib.linkLibrary(tools_lib);
+
     if (enable_opt) {
         glslang_lib.addCSourceFiles(.{
             .files = &sources_opt,
@@ -140,21 +157,16 @@ pub fn build(b: *Build) !void {
 
         glslang_lib.defineCMacro("ENABLE_OPT", "1");
 
-        glslang_lib.step.dependOn(&tools_libs.tools_opt.step);
-        glslang_lib.step.dependOn(&tools_libs.tools_val.step);
-        glslang_lib.linkLibrary(tools_libs.tools_opt);
-        glslang_lib.linkLibrary(tools_libs.tools_val);
+        glslang_lib.linkLibrary(tools_opt);
+        glslang_lib.linkLibrary(tools_val);
     } else {
         glslang_lib.defineCMacro("ENABLE_OPT", "0");
     }
 
 
     addIncludes(glslang_lib);
-    spvtools.addSPIRVPublicIncludes(glslang_lib, spirv_header_name);
 
     glslang_lib.linkLibCpp();
-
-    glslang_lib.step.dependOn(&build_headers.step);
 
     const build_step = b.step("glslang-library", "Build the glslang library");
     build_step.dependOn(&b.addInstallArtifact(glslang_lib, .{}).step);
@@ -339,44 +351,6 @@ fn generateHeaders(allocator: std.mem.Allocator) void {
     genBuildInfo(allocator);
     genExtensionHeaders(allocator);
 }
-
-var build_mutex = std.Thread.Mutex{};
-
-pub const BuildHeadersStep = struct {
-    step: std.Build.Step,
-    b: *std.Build,
-
-    pub fn init(b: *std.Build) *BuildHeadersStep {
-        const build_headers = b.allocator.create(BuildHeadersStep) catch unreachable;
-
-        build_headers.* = .{
-            .step = std.Build.Step.init(.{
-                .id = .custom,
-                .name = "Build header files.",
-                .owner = b,
-                .makeFn = &make,
-            }),
-            .b = b,
-        };
-
-        return build_headers;
-    }
-
-    fn make(step_ptr: *std.Build.Step, prog_node: *std.Progress.Node) anyerror!void {
-        _ = prog_node;
-
-        const build_headers: *BuildHeadersStep = @fieldParentPtr("step", step_ptr);
-        const b = build_headers.b;
-
-        // Zig will run build steps in parallel if possible, so if there were two invocations of
-        // then this function would be called in parallel. We're manipulating the FS here
-        // and so need to prevent that.
-        build_mutex.lock();
-        defer build_mutex.unlock();
-
-        generateHeaders(b.allocator);
-    }
-};
 
 
 const sources_spirv = [_][]const u8{

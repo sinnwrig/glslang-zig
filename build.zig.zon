@@ -18,5 +18,10 @@
         "README.md",
         "SECURITY.md",
     },
-    .dependencies = .{},
+    .dependencies = .{
+        .@"SPIRV-Tools" = .{ 
+            .path = "External/spirv-tools", // Downloaded with update_glslang_sources.py
+            .lazy = true,
+        },
+    },
 }
