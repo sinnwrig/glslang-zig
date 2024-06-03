@@ -141,6 +141,10 @@ private:
     void* context;
 };
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 GLSLANG_EXPORT int glslang_initialize_process() { return static_cast<int>(glslang::InitializeProcess()); }
 
 GLSLANG_EXPORT void glslang_finalize_process() { glslang::FinalizeProcess(); }
@@ -480,3 +484,7 @@ GLSLANG_EXPORT const char* glslang_program_get_info_debug_log(glslang_program_t*
 {
     return program->program->getInfoDebugLog();
 }
+
+#ifdef __cplusplus
+}
+#endif

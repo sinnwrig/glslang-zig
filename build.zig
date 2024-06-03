@@ -28,10 +28,6 @@ pub fn build(b: *Build) !void {
         try cppflags.append("-g0");
     }
 
-    if (tag == .windows and shared) {
-        try cppflags.append("-rdynamic");
-    }
-
     try cppflags.append("-std=c++17");
 
     const base_flags = &.{ 
@@ -77,6 +73,8 @@ pub fn build(b: *Build) !void {
         .debug = debug,
         .shared = shared_tools,
         .header_path = path,
+        .no_link = true,
+        .no_reduce = true,
     })) |dep| {
         tools_lib = dep.artifact("SPIRV-Tools");
         tools_opt = dep.artifact("SPIRV-Tools-opt");
@@ -180,10 +178,6 @@ pub fn build(b: *Build) !void {
             .target = target,
         });
 
-        if (shared) {
-            glslang_exe.defineCMacro("GLSLANG_IS_SHARED_LIBRARY", "");
-        }
-
         const install_glslang_step = b.step("glslang-standalone", "Build and install glslang.exe");
         install_glslang_step.dependOn(&b.addInstallArtifact(glslang_exe, .{}).step);
         glslang_exe.addCSourceFiles(.{
@@ -247,6 +241,7 @@ pub fn build(b: *Build) !void {
 fn addIncludes(step: *std.Build.Step.Compile) void {
     step.addIncludePath(.{ .path = sdkPath("/" ++ output_path) });
     step.addIncludePath(.{ .path = sdkPath("/") });
+    step.addIncludePath(.{ .path = sdkPath("/External/spirv-tools/include") });
 }
 
 fn ensureCommandExists(allocator: std.mem.Allocator, name: []const u8, exist_check: []const u8) bool {

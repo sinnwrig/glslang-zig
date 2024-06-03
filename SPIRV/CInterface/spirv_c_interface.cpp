@@ -84,6 +84,10 @@ static EShLanguage c_shader_stage(glslang_stage_t stage)
     return EShLangCount;
 }
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 GLSLANG_EXPORT void glslang_program_SPIRV_generate(glslang_program_t* program, glslang_stage_t stage)
 {
     glslang_spv_options_t spv_options {};
@@ -138,3 +142,7 @@ GLSLANG_EXPORT char* glslang_SPIRV_disassemble(const unsigned int* spv_words, si
 
     return buffer;
 }
+
+#ifdef __cplusplus
+}
+#endif
