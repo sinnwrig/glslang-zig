@@ -284,6 +284,8 @@ GLSLANG_EXPORT const char* glslang_program_SPIRV_get_messages(glslang_program_t*
 GLSLANG_EXPORT const char* glslang_program_get_info_log(glslang_program_t* program);
 GLSLANG_EXPORT const char* glslang_program_get_info_debug_log(glslang_program_t* program);
 
+GLSLANG_EXPORT char* glslang_SPIRV_disassemble(const unsigned int* spv_words, size_t spv_words_len);
+
 #ifdef __cplusplus
 }
 #endif

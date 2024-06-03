@@ -29,12 +29,15 @@ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 **/
+#include <string>
+#include <sstream>
 
 #include "glslang/Include/glslang_c_interface.h"
 
 #include "SPIRV/GlslangToSpv.h"
 #include "SPIRV/Logger.h"
 #include "SPIRV/SpvTools.h"
+#include "SPIRV/disassemble.h"
 
 static_assert(sizeof(glslang_spv_options_t) == sizeof(glslang::SpvOptions), "");
 
@@ -117,4 +120,21 @@ GLSLANG_EXPORT unsigned int* glslang_program_SPIRV_get_ptr(glslang_program_t* pr
 GLSLANG_EXPORT const char* glslang_program_SPIRV_get_messages(glslang_program_t* program)
 {
     return program->loggerMessages.empty() ? nullptr : program->loggerMessages.c_str();
+}
+
+GLSLANG_EXPORT char* glslang_SPIRV_disassemble(const unsigned int* spv_words, size_t spv_words_len)
+{
+    std::stringstream string_stream;
+    std::vector<unsigned int> words_vector;
+    words_vector.assign(spv_words, spv_words + spv_words_len);
+
+    spv::Disassemble(string_stream, words_vector);
+
+    std::string string = string_stream.str();
+
+    const size_t size = string.size();
+    char* buffer = new char[size + 1];
+    memcpy(buffer, string.c_str(), size + 1);
+
+    return buffer;
 }

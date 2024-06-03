@@ -26,15 +26,26 @@ pub fn build(b: *Build) !void {
     const standalone_glslang = b.option(bool, "standalone", "Build glslang.exe standalone command-line compiler.") orelse false;
     const standalone_spvremap = b.option(bool, "standalone-remap", "Build spirv-remap.exe standalone command-line remapper.") orelse false;
 
+    if (shared and (standalone_glslang or standalone_spvremap)) {
+        log.err("Cannot build standalone sources with shared glslang. Recompile without `-Dshared` or `-Dstandalone/-Dstandalone-remap`", .{});
+        std.process.exit(1);
+    }
+
     const tools_libs: spvtools.SPVLibs = spvtools.buildSpirv(b, optimize, target, shared_tools, debug, spirv_header_name) catch |err| {
         log.err("Error building SPIRV-Tools: {s}", .{ @errorName(err) });
         std.process.exit(1);
     }; 
 
+    const tag = target.result.os.tag;
+
     var cppflags = std.ArrayList([]const u8).init(b.allocator);
 
     if (!debug) {
         try cppflags.append("-g0");
+    }
+
+    if (tag == .windows and shared) {
+        try cppflags.append("-rdynamic");
     }
 
     try cppflags.append("-std=c++17");
@@ -93,8 +104,6 @@ pub fn build(b: *Build) !void {
         .files = &sources,
         .flags = cppflags.items,
     });
-
-    const tag = target.result.os.tag;
 
     if (tag == .windows) {
         glslang_lib.addCSourceFiles(.{
@@ -159,6 +168,10 @@ pub fn build(b: *Build) !void {
             .target = target,
         });
 
+        if (shared) {
+            glslang_exe.defineCMacro("GLSLANG_IS_SHARED_LIBRARY", "");
+        }
+
         const install_glslang_step = b.step("glslang-standalone", "Build and install glslang.exe");
         install_glslang_step.dependOn(&b.addInstallArtifact(glslang_exe, .{}).step);
         glslang_exe.addCSourceFiles(.{
@@ -196,6 +209,10 @@ pub fn build(b: *Build) !void {
             .optimize = optimize,
             .target = target,
         });
+
+        if (shared) {
+            spirv_remap.defineCMacro("GLSLANG_IS_SHARED_LIBRARY", "");
+        }
 
         const install_remap_step = b.step("spirv-remap", "Build and install spirv-remap.exe");
         install_remap_step.dependOn(&b.addInstallArtifact(spirv_remap, .{}).step);
