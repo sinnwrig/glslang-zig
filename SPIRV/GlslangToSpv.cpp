@@ -1583,6 +1583,8 @@ TGlslangToSpvTraverser::TGlslangToSpvTraverser(unsigned int spvVersion,
             builder.addInclude(iItr->first, iItr->second);
     }
 
+    builder.setUseReplicatedComposites(glslangIntermediate->usingReplicatedComposites());
+
     stdBuiltins = builder.import("GLSL.std.450");
 
     spv::AddressingModel addressingModel = spv::AddressingModelLogical;
@@ -5787,8 +5789,16 @@ void TGlslangToSpvTraverser::translateArguments(const glslang::TIntermAggregate&
             lvalueCoherentFlags = builder.getAccessChain().coherentFlags;
             builder.addDecoration(lvalue_id, TranslateNonUniformDecoration(lvalueCoherentFlags));
             lvalueCoherentFlags |= TranslateCoherent(glslangArguments[i]->getAsTyped()->getType());
-        } else
-            arguments.push_back(accessChainLoad(glslangArguments[i]->getAsTyped()->getType()));
+        } else {
+            if (i > 0 &&
+                glslangArguments[i]->getAsSymbolNode() && glslangArguments[i-1]->getAsSymbolNode() &&
+                glslangArguments[i]->getAsSymbolNode()->getId() == glslangArguments[i-1]->getAsSymbolNode()->getId()) {
+                // Reuse the id if possible
+                arguments.push_back(arguments[i-1]);
+            } else {
+                arguments.push_back(accessChainLoad(glslangArguments[i]->getAsTyped()->getType()));
+            }
+        }
     }
 }
 
