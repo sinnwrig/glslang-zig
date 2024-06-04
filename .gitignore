@@ -7,8 +7,6 @@ tags
 TAGS
 bazel-*
 build/
-zig-cache/
-zig-out/
 Test/localResults/
 External/googletest
 External/spirv-tools
@@ -25,3 +23,8 @@ tools/
 # Random OS stuff
 .DS_Store
 ._*
+
+# Zig
+.zig-cache/
+zig-cache/
+zig-out/

@@ -13,7 +13,8 @@ pub fn build(b: *Build) !void {
     const enable_opt = !(b.option(bool, "no_opt", "Skip building spirv-tools optimization.") orelse false);
     const shared_tools = b.option(bool, "shared_tools", "Build and link spirv-tools as a shared library.") orelse false;
     const standalone_glslang = b.option(bool, "standalone", "Build glslang.exe standalone command-line compiler.") orelse false;
-    const standalone_spvremap = b.option(bool, "standalone-remap", "Build spirv-remap.exe standalone command-line remapper.") orelse false;
+    const standalone_spvremap = b.option(bool, "standalone_remap", "Build spirv-remap.exe standalone command-line remapper.") orelse false;
+    const minimal_test_exe = b.option(bool, "minimal_test", "Build a minimal test for linking") orelse false;
 
     if (shared and (standalone_glslang or standalone_spvremap)) {
         log.err("Cannot build standalone sources with shared glslang. Recompile without `-Dshared` or `-Dstandalone/-Dstandalone-remap`", .{});
@@ -162,7 +163,7 @@ pub fn build(b: *Build) !void {
     }
 
 
-    addIncludes(glslang_lib);
+    addIncludes(b, glslang_lib);
 
     glslang_lib.linkLibCpp();
 
@@ -185,7 +186,7 @@ pub fn build(b: *Build) !void {
             .flags = &.{ "-std=c++17" },
         });
 
-        addIncludes(glslang_exe);
+        addIncludes(b, glslang_exe);
 
         b.installArtifact(glslang_exe);
         glslang_exe.linkLibrary(glslang_lib);
@@ -227,7 +228,7 @@ pub fn build(b: *Build) !void {
             .flags = &.{ "-std=c++17" },
         });
 
-        addIncludes(spirv_remap);
+        addIncludes(b, spirv_remap);
 
         b.installArtifact(spirv_remap);
         spirv_remap.linkLibrary(glslang_lib);
@@ -236,16 +237,45 @@ pub fn build(b: *Build) !void {
             spirv_remap.want_lto = false;
         }
     }
+
+
+    if (minimal_test_exe) {
+        const min_test = b.addExecutable(.{
+            .name = "minimal-test",
+            .optimize = optimize,
+            .target = target,
+        });
+
+        if (shared) {
+            min_test.defineCMacro("GLSLANG_IS_SHARED_LIBRARY", "");
+        }
+
+        const min_test_step = b.step("minimal-test", "Build and install minimal-test.exe");
+        min_test_step.dependOn(&b.addInstallArtifact(min_test, .{}).step);
+        min_test.addCSourceFile(.{
+            .file = b.path("StandAlone/minimal-test.cpp"),
+            .flags = &.{ "-std=c++17" },
+        });
+
+        addIncludes(b, min_test);
+
+        b.installArtifact(min_test);
+        min_test.linkLibrary(glslang_lib);
+
+        if (target.result.os.tag == .windows) {
+            min_test.want_lto = false;
+        }
+    }
 }
 
-fn addIncludes(step: *std.Build.Step.Compile) void {
-    step.addIncludePath(.{ .path = sdkPath("/" ++ output_path) });
-    step.addIncludePath(.{ .path = sdkPath("/") });
-    step.addIncludePath(.{ .path = sdkPath("/External/spirv-tools/include") });
+fn addIncludes(b: *Build, step: *std.Build.Step.Compile) void {
+    step.addIncludePath(b.path(output_path));
+    step.addIncludePath(b.path(""));
+    step.addIncludePath(b.path("External/spirv-tools/include"));
 }
 
 fn ensureCommandExists(allocator: std.mem.Allocator, name: []const u8, exist_check: []const u8) bool {
-    const result = std.ChildProcess.run(.{
+    const result = std.process.Child.run(.{
         .allocator = allocator,
         .argv = &[_][]const u8{ name, exist_check },
         .cwd = ".",
@@ -273,7 +303,7 @@ fn exec(allocator: std.mem.Allocator, argv: []const []const u8, cwd: []const u8)
     }
     log.info("{s}", .{buf.items});
 
-    var child = std.ChildProcess.init(argv, allocator);
+    var child = std.process.Child.init(argv, allocator);
     child.cwd = cwd;
     _ = try child.spawnAndWait();
 }
