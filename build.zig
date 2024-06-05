@@ -48,15 +48,9 @@ pub fn build(b: *Build) !void {
 
     try cppflags.appendSlice(base_flags);
 
-// ------------------
-// SPIRV-Tools
-// ------------------
-
-    generateHeaders(b.allocator);
-
     _ = std.fs.openDirAbsolute(sdkPath("/External/spirv-tools"), .{}) catch |err| {
         if (err == error.FileNotFound) {
-            log.err("SPIRV-Tools build directory was not found - ensure sources have been cloned with `./update_glslang_sources.py --site zig`/.", .{});
+            log.err("SPIRV-Tools build directory was not found - ensure sources have been cloned with `./update_glslang_sources.py --site zig`.", .{});
         }
 
         std.process.exit(1);
@@ -95,6 +89,8 @@ pub fn build(b: *Build) !void {
 
     var glslang_lib: *std.Build.Step.Compile = undefined;
 
+    generateHeaders(b.allocator);
+
     if (shared) {
         glslang_lib = b.addSharedLibrary(.{
             .name = "glslang",
@@ -102,6 +98,8 @@ pub fn build(b: *Build) !void {
             .optimize = optimize,
             .target = target,
         });
+
+        glslang_lib.rdynamic = true;
 
         glslang_lib.defineCMacro("GLSLANG_IS_SHARED_LIBRARY", "");
         glslang_lib.defineCMacro("GLSLANG_EXPORTING", "");
@@ -119,6 +117,12 @@ pub fn build(b: *Build) !void {
         .flags = cppflags.items,
     });
 
+    glslang_lib.linkLibrary(tools_lib);
+    addIncludes(b, glslang_lib);
+
+    glslang_lib.linkLibCpp();
+
+    // OS-specific headers
     if (tag == .windows) {
         glslang_lib.addCSourceFiles(.{
             .files = &sources_win,
@@ -135,6 +139,8 @@ pub fn build(b: *Build) !void {
         glslang_lib.defineCMacro("GLSLANG_OSINCLUDE_UNIX", "");
     }
 
+
+    // Add HLSL sources
     if (enable_hlsl) {
         glslang_lib.addCSourceFiles(.{
             .files = &sources_hlsl,
@@ -146,8 +152,8 @@ pub fn build(b: *Build) !void {
         glslang_lib.defineCMacro("ENABLE_HLSL", "0");
     }
 
-    glslang_lib.linkLibrary(tools_lib);
 
+    // Add SPIRV-Tools-opt sources
     if (enable_opt) {
         glslang_lib.addCSourceFiles(.{
             .files = &sources_opt,
@@ -163,14 +169,11 @@ pub fn build(b: *Build) !void {
     }
 
 
-    addIncludes(b, glslang_lib);
-
-    glslang_lib.linkLibCpp();
-
     const build_step = b.step("glslang-library", "Build the glslang library");
     build_step.dependOn(&b.addInstallArtifact(glslang_lib, .{}).step);
 
     b.installArtifact(glslang_lib);
+
 
     if (standalone_glslang) {
         const glslang_exe = b.addExecutable(.{
@@ -209,6 +212,7 @@ pub fn build(b: *Build) !void {
             glslang_exe.defineCMacro("ENABLE_OPT", "0");
         }
     }
+
 
     if (standalone_spvremap) {
         const spirv_remap = b.addExecutable(.{
