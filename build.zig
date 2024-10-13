@@ -14,7 +14,8 @@ pub fn build(b: *Build) !void {
     const shared_tools = b.option(bool, "shared_tools", "Build and link spirv-tools as a shared library.") orelse false;
     const standalone_glslang = b.option(bool, "standalone", "Build glslang.exe standalone command-line compiler.") orelse false;
     const standalone_spvremap = b.option(bool, "standalone_remap", "Build spirv-remap.exe standalone command-line remapper.") orelse false;
-    const minimal_test_exe = b.option(bool, "minimal_test", "Build a minimal test for linking") orelse false;
+    const regenerate_headers = b.option(bool, "regenerate_headers", "Regenerate glslang header libraries.") orelse false;
+    const minimal_test_exe = b.option(bool, "minimal_test", "Build a minimal test for linking.") orelse false;
 
     if (shared and (standalone_glslang or standalone_spvremap)) {
         log.err("Cannot build standalone sources with shared glslang. Recompile without `-Dshared` or `-Dstandalone/-Dstandalone-remap`", .{});
@@ -48,13 +49,8 @@ pub fn build(b: *Build) !void {
 
     try cppflags.appendSlice(base_flags);
 
-    _ = std.fs.openDirAbsolute(sdkPath("/External/spirv-tools"), .{}) catch |err| {
-        if (err == error.FileNotFound) {
-            log.err("SPIRV-Tools build directory was not found - ensure sources have been cloned with `./update_glslang_sources.py --site zig`.", .{});
-        }
-
-        std.process.exit(1);
-    };
+    downloadOrPull(b, "sinnwrig", "SPIRV-Tools-zig", &b.path("External/spirv-tools"));
+    downloadOrPull(b, "KhronosGroup", "SPIRV-Headers", &b.path("External/spirv-tools/external/spirv-headers"));
 
     var tools_lib: *Build.Step.Compile = undefined;
     var tools_opt: *Build.Step.Compile = undefined;
@@ -70,10 +66,11 @@ pub fn build(b: *Build) !void {
         .header_path = path,
         .no_link = true,
         .no_reduce = true,
+        .rebuild_headers = regenerate_headers
     })) |dep| {
         tools_lib = dep.artifact("SPIRV-Tools");
         tools_opt = dep.artifact("SPIRV-Tools-opt");
-        tools_val = dep.artifact("SPIRV-Tools-val");    
+        tools_val = dep.artifact("SPIRV-Tools-val");  
     }
 
     if (tools_lib == undefined or tools_opt == undefined or tools_val == undefined) {
@@ -89,8 +86,6 @@ pub fn build(b: *Build) !void {
 
     var glslang_lib: *std.Build.Step.Compile = undefined;
 
-    generateHeaders(b.allocator);
-
     if (shared) {
         glslang_lib = b.addSharedLibrary(.{
             .name = "glslang",
@@ -98,8 +93,6 @@ pub fn build(b: *Build) !void {
             .optimize = optimize,
             .target = target,
         });
-
-        glslang_lib.rdynamic = true;
 
         glslang_lib.defineCMacro("GLSLANG_IS_SHARED_LIBRARY", "");
         glslang_lib.defineCMacro("GLSLANG_EXPORTING", "");
@@ -110,6 +103,10 @@ pub fn build(b: *Build) !void {
             .optimize = optimize,
             .target = target,
         });
+    }
+
+    if (regenerate_headers) {
+        glslang_lib.step.dependOn(generateHeaders(b));
     }
 
     glslang_lib.addCSourceFiles(.{
@@ -273,7 +270,7 @@ pub fn build(b: *Build) !void {
 }
 
 fn addIncludes(b: *Build, step: *std.Build.Step.Compile) void {
-    step.addIncludePath(b.path(output_path));
+    step.addIncludePath(b.path(header_output_path));
     step.addIncludePath(b.path(""));
     step.addIncludePath(b.path("External/spirv-tools/include"));
 }
@@ -299,86 +296,82 @@ fn ensureCommandExists(allocator: std.mem.Allocator, name: []const u8, exist_che
     return true;
 }
 
-fn exec(allocator: std.mem.Allocator, argv: []const []const u8, cwd: []const u8) !void {
-    log.info("cd {s}", .{cwd});
-    var buf = std.ArrayList(u8).init(allocator);
-    for (argv) |arg| {
-        try std.fmt.format(buf.writer(), "{s} ", .{arg});
-    }
-    log.info("{s}", .{buf.items});
+// --------------------------
+// spirv-tools download logic
+// --------------------------
 
-    var child = std.process.Child.init(argv, allocator);
-    child.cwd = cwd;
-    _ = try child.spawnAndWait();
-}
-
-fn sdkPath(comptime suffix: []const u8) []const u8 {
-    if (suffix[0] != '/') @compileError("suffix must be an absolute path");
-    return comptime blk: {
-        const root_dir = std.fs.path.dirname(@src().file) orelse ".";
-        break :blk root_dir ++ suffix;
-    };
-}
-
-fn ensurePython(allocator: std.mem.Allocator) void {
-    if (!ensureCommandExists(allocator, "python3", "--version")) {
-        log.err("'python3 --version' failed. Is python not installed?", .{});
+fn downloadOrPull(b: *Build, comptime user: []const u8, comptime repo: []const u8, out_path: *const std.Build.LazyPath) void {
+    if (!ensureCommandExists(b.allocator, "git", "--version")) {
+        log.err("'git --version' failed. Ensure a valid git installation is present on the path.", .{});
         std.process.exit(1);
     }
-}
 
-fn runPython(allocator: std.mem.Allocator, args: []const []const u8, errMsg: []const u8) void {
-    exec(allocator, args, sdkPath("/")) catch |err| {
-        log.err("{s}. error: {s}", .{ errMsg, @errorName(err) });
-        std.process.exit(1);
+    const git_cmd = b.addSystemCommand(&.{ "git" });
+    git_cmd.setCwd(out_path.dirname());
+
+    _ = std.fs.openDirAbsolute(out_path.getPath(b), .{}) catch |err| {
+        if (err == error.FileNotFound) {
+            _ = b.run(&.{ 
+                "git", "clone", "https://github.com/" ++ user ++ "/" ++ repo, out_path.getPath(b)
+            });
+
+            return;
+        }
     };
+
+    _ = b.run(&.{ 
+        "git", "-C", out_path.getPath(b), "pull",
+    });
 }
 
-// ------------------------------------------
-// Include generation logic
-// ------------------------------------------
+// -----------------------
+// Header generation logic
+// -----------------------
 
-pub const output_path = "build";
+pub const header_output_path = "generated-include";
 
 const build_info_script = "build_info.py";
 const ext_header_script = "gen_extension_headers.py";
 
-fn outPath(comptime out_name: []const u8) []const u8 {
-    if (out_name[0] != '/') @compileError("suffix must be an absolute path");
-    return sdkPath("/" ++ output_path ++ out_name);
+fn genBuildInfo(b: *Build) *Build.Step.Run {
+    const python_cmd = b.addSystemCommand(&.{ "python3" });
+
+    python_cmd.setCwd(b.path("."));
+    python_cmd.addFileArg(b.path(build_info_script));
+    python_cmd.addFileArg(b.path("."));
+    python_cmd.addArg("-i");
+    python_cmd.addFileArg(b.path("build_info.h.tmpl"));
+    python_cmd.addArg("-o");
+    python_cmd.addFileArg(b.path(header_output_path).path(b, "glslang").path(b, "build_info.h"));
+
+    return python_cmd;
 }
 
-// Script usage derived from the BUILD.gn
+fn genExtensionHeaders(b: *Build) *Build.Step.Run {
+    const python_cmd = b.addSystemCommand(&.{ "python3" });
 
-fn genBuildInfo(allocator: std.mem.Allocator) void {
-    const args = &[_][]const u8{ 
-        "python3", build_info_script, 
-        sdkPath("/"), 
-        "-i", sdkPath("/build_info.h.tmpl"),
-        "-o", outPath("/glslang/build_info.h"),
-    };
+    python_cmd.setCwd(b.path("."));
+    python_cmd.addFileArg(b.path(ext_header_script));
+    python_cmd.addArg("-i");
+    python_cmd.addFileArg(b.path("glslang").path(b, "ExtensionHeaders"));
+    python_cmd.addArg("-o");
+    python_cmd.addFileArg(b.path(header_output_path).path(b, "glslang").path(b, "glsl_intrinsic_header.h"));
 
-    runPython(allocator, args, "Failed to generate build info file.");
+    return python_cmd;
 }
 
-fn genExtensionHeaders(allocator: std.mem.Allocator) void {
-    const args = &[_][]const u8 {
-        "python3", ext_header_script,
-        "-i", sdkPath("/glslang/ExtensionHeaders"),
-        "-o", outPath("/glslang/glsl_intrinsic_header.h"),
-    };
-
-    runPython(allocator, args, "Failed to generate extension headers");
-}
-
-fn generateHeaders(allocator: std.mem.Allocator) void {
-    if (!ensureCommandExists(allocator, "python3", "--version")) {
-        log.err("'python3 --version' failed. Is python not installed?", .{});
+fn generateHeaders(b: *Build) *std.Build.Step {
+    if (!ensureCommandExists(b.allocator, "python3", "--version")) {
+        log.err("'python3 --version' failed. Ensure a valid python3 installation is present on the path.", .{});
         std.process.exit(1);
     }
 
-    genBuildInfo(allocator);
-    genExtensionHeaders(allocator);
+    const headers_step = b.step("build-headers", "Build glslang headers");
+
+    headers_step.dependOn(&genBuildInfo(b).step);
+    headers_step.dependOn(&genExtensionHeaders(b).step);
+
+    return headers_step;
 }
 
 
