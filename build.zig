@@ -71,9 +71,7 @@ pub fn build(b: *Build) !void {
         tools_lib = dep.artifact("SPIRV-Tools");
         tools_opt = dep.artifact("SPIRV-Tools-opt");
         tools_val = dep.artifact("SPIRV-Tools-val");  
-    }
-
-    if (tools_lib == undefined or tools_opt == undefined or tools_val == undefined) {
+    } else {
         log.err("Error building SPIRV-Tools libraries", .{});
         std.process.exit(1);
     }
