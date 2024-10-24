@@ -45,6 +45,9 @@ pub fn build(b: *Build) !void {
         "-Wno-suggest-override",
         "-Wno-unused-variable",
         "-fPIC",
+        "-static",
+        "-static-libgcc",
+        "-static-libstdc++"
     };
 
     try cppflags.appendSlice(base_flags);
@@ -70,7 +73,7 @@ pub fn build(b: *Build) !void {
     })) |dep| {
         tools_lib = dep.artifact("SPIRV-Tools");
         tools_opt = dep.artifact("SPIRV-Tools-opt");
-        tools_val = dep.artifact("SPIRV-Tools-val");  
+        tools_val = dep.artifact("SPIRV-Tools-val");
     } else {
         log.err("Error building SPIRV-Tools libraries", .{});
         std.process.exit(1);
@@ -177,6 +180,8 @@ pub fn build(b: *Build) !void {
             .target = target,
         });
 
+        glslang_exe.pie = true;
+
         const install_glslang_step = b.step("glslang-standalone", "Build and install glslang.exe");
         install_glslang_step.dependOn(&b.addInstallArtifact(glslang_exe, .{}).step);
         glslang_exe.addCSourceFiles(.{
@@ -188,12 +193,6 @@ pub fn build(b: *Build) !void {
 
         b.installArtifact(glslang_exe);
         glslang_exe.linkLibrary(glslang_lib);
-
-        if (target.result.os.tag == .windows) {
-            // windows must be built with LTO disabled due to:
-            // https://github.com/ziglang/zig/issues/15958
-            glslang_exe.want_lto = false;
-        }
 
         if (enable_hlsl) {
             glslang_exe.defineCMacro("ENABLE_HLSL", "1");
@@ -216,6 +215,8 @@ pub fn build(b: *Build) !void {
             .target = target,
         });
 
+        spirv_remap.pie = true;
+
         if (shared) {
             spirv_remap.defineCMacro("GLSLANG_IS_SHARED_LIBRARY", "");
         }
@@ -231,10 +232,6 @@ pub fn build(b: *Build) !void {
 
         b.installArtifact(spirv_remap);
         spirv_remap.linkLibrary(glslang_lib);
-
-        if (target.result.os.tag == .windows) {
-            spirv_remap.want_lto = false;
-        }
     }
 
 
@@ -244,6 +241,8 @@ pub fn build(b: *Build) !void {
             .optimize = optimize,
             .target = target,
         });
+
+        min_test.pie = true;
 
         if (shared) {
             min_test.defineCMacro("GLSLANG_IS_SHARED_LIBRARY", "");
@@ -260,10 +259,6 @@ pub fn build(b: *Build) !void {
 
         b.installArtifact(min_test);
         min_test.linkLibrary(glslang_lib);
-
-        if (target.result.os.tag == .windows) {
-            min_test.want_lto = false;
-        }
     }
 }
 
