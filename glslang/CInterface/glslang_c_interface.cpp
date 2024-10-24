@@ -553,33 +553,6 @@ GLSLANG_EXPORT void glslang_glsl_resolver_delete(glslang_resolver_t* resolver)
     delete reinterpret_cast<glslang::TDefaultGlslIoResolver* >(resolver);
 }
 
-GLSLANG_EXPORT glslang_mapper_t* glslang_glsl_mapper_create()
-{
-    return reinterpret_cast<glslang_mapper_t*>(new glslang::TGlslIoMapper());
-}
-
-GLSLANG_EXPORT void glslang_glsl_mapper_delete(glslang_mapper_t* mapper)
-{
-    if (!mapper)
-        return;
-
-    delete reinterpret_cast<glslang::TGlslIoMapper* >(mapper);
-}
-
-GLSLANG_EXPORT glslang_resolver_t* glslang_glsl_resolver_create(glslang_program_t* program, glslang_stage_t stage)
-{
-    glslang::TIntermediate* intermediate = program->program->getIntermediate(c_shader_stage(stage));
-    return reinterpret_cast<glslang_resolver_t*>(new glslang::TDefaultGlslIoResolver(reinterpret_cast<const glslang::TIntermediate&>(*intermediate)));
-}
-
-GLSLANG_EXPORT void glslang_glsl_resolver_delete(glslang_resolver_t* resolver)
-{
-    if (!resolver)
-        return;
-
-    delete reinterpret_cast<glslang::TDefaultGlslIoResolver* >(resolver);
-}
-
 #ifdef __cplusplus
 }
 #endif
