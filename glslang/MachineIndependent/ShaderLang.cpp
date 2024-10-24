@@ -1340,6 +1340,11 @@ int ShInitialize()
     if (PerProcessGPA == nullptr)
         PerProcessGPA = new TPoolAllocator();
 
+    glslang::TScanContext::fillInKeywordMap();
+#ifdef ENABLE_HLSL
+    glslang::HlslScanContext::fillInKeywordMap();
+#endif
+
     return 1;
 }
 
@@ -1427,6 +1432,11 @@ int ShFinalize()
         delete PerProcessGPA;
         PerProcessGPA = nullptr;
     }
+
+    glslang::TScanContext::deleteKeywordMap();
+#ifdef ENABLE_HLSL
+    glslang::HlslScanContext::deleteKeywordMap();
+#endif
 
     return 1;
 }
