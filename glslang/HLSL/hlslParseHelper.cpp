@@ -43,8 +43,6 @@
 #include "../MachineIndependent/Scan.h"
 #include "../MachineIndependent/preprocessor/PpContext.h"
 
-#include "../OSDependent/osinclude.h"
-
 #include <algorithm>
 #include <functional>
 #include <cctype>
@@ -1441,7 +1439,7 @@ int HlslParseContext::findSubtreeOffset(const TType& type, int subset, const TVe
         return offsets[subset];
     TType derefType(type, 0);
     return findSubtreeOffset(derefType, offsets[subset], offsets);
-};
+}
 
 // Find and return the split IO TVariable for id, or nullptr if none.
 TVariable* HlslParseContext::getSplitNonIoVar(long long id) const
@@ -6059,7 +6057,7 @@ void HlslParseContext::builtInOpCheck(const TSourceLoc& loc, const TFunction& fn
         unaryArg = callNode.getAsUnaryNode()->getOperand();
         arg0 = unaryArg;
     }
-    const TIntermSequence& aggArgs = *argp;  // only valid when unaryArg is nullptr
+    const TIntermSequence& aggArgs = argp ? *argp : TIntermSequence();  // only valid when unaryArg is nullptr
 
     switch (callNode.getOp()) {
     case EOpTextureGather:

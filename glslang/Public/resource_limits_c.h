@@ -30,6 +30,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define _STAND_ALONE_RESOURCE_LIMITS_C_INCLUDED_
 
 #include "../Include/glslang_c_interface.h"
+#include "../Include/visibility.h"
 
 #ifdef __cplusplus
 extern "C" {

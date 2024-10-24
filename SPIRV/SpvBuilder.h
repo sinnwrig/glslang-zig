@@ -48,6 +48,7 @@
 #define SpvBuilder_H
 
 #include "Logger.h"
+#define SPV_ENABLE_UTILITY_CODE
 #include "spirv.hpp"
 #include "spvIR.h"
 namespace spv {
@@ -56,6 +57,7 @@ namespace spv {
 }
 
 #include <algorithm>
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <set>
@@ -107,7 +109,7 @@ public:
     spv::Id getMainFileId() const { return mainFileId; }
 
     // Initialize the main source file name
-    void setDebugSourceFile(const std::string& file)
+    void setDebugMainSourceFile(const std::string& file)
     {
         if (trackDebugInfo) {
             dirtyLineTracker = true;
@@ -245,11 +247,14 @@ public:
     Id makeDebugValue(Id const debugLocalVariable, Id const value);
     Id makeDebugFunctionType(Id returnType, const std::vector<Id>& paramTypes);
     Id makeDebugFunction(Function* function, Id nameId, Id funcTypeId);
-    Id makeDebugLexicalBlock(uint32_t line);
+    Id makeDebugLexicalBlock(uint32_t line, uint32_t column);
     std::string unmangleFunctionName(std::string const& name) const;
-    void setupDebugFunctionEntry(Function* function, const char* name, int line, 
-                                 const std::vector<Id>& paramTypes,
-                                 const std::vector<char const*>& paramNames);
+
+    // Initialize non-semantic debug information for a function, including those of:
+    // - The function definition
+    // - The function parameters
+    void setupFunctionDebugInfo(Function* function, const char* name, const std::vector<Id>& paramTypes,
+                                const std::vector<char const*>& paramNames);
 
     // accelerationStructureNV type
     Id makeAccelerationStructureType();
@@ -264,9 +269,9 @@ public:
     Op getOpCode(Id id) const { return module.getInstruction(id)->getOpCode(); }
     Op getTypeClass(Id typeId) const { return getOpCode(typeId); }
     Op getMostBasicTypeClass(Id typeId) const;
-    int getNumComponents(Id resultId) const { return getNumTypeComponents(getTypeId(resultId)); }
-    int getNumTypeConstituents(Id typeId) const;
-    int getNumTypeComponents(Id typeId) const { return getNumTypeConstituents(typeId); }
+    unsigned int getNumComponents(Id resultId) const { return getNumTypeComponents(getTypeId(resultId)); }
+    unsigned int getNumTypeConstituents(Id typeId) const;
+    unsigned int getNumTypeComponents(Id typeId) const { return getNumTypeConstituents(typeId); }
     Id getScalarTypeId(Id typeId) const;
     Id getContainedTypeId(Id typeId) const;
     Id getContainedTypeId(Id typeId, int) const;
@@ -334,18 +339,18 @@ public:
         return module.getInstruction(scalarTypeId)->getImmediateOperand(0);
     }
 
-    int getTypeNumColumns(Id typeId) const
+    unsigned int getTypeNumColumns(Id typeId) const
     {
         assert(isMatrixType(typeId));
         return getNumTypeConstituents(typeId);
     }
-    int getNumColumns(Id resultId) const { return getTypeNumColumns(getTypeId(resultId)); }
-    int getTypeNumRows(Id typeId) const
+    unsigned int getNumColumns(Id resultId) const { return getTypeNumColumns(getTypeId(resultId)); }
+    unsigned int getTypeNumRows(Id typeId) const
     {
         assert(isMatrixType(typeId));
         return getNumTypeComponents(getContainedTypeId(typeId));
     }
-    int getNumRows(Id resultId) const { return getTypeNumRows(getTypeId(resultId)); }
+    unsigned int getNumRows(Id resultId) const { return getTypeNumRows(getTypeId(resultId)); }
 
     Dim getTypeDimensionality(Id typeId) const
     {
@@ -416,8 +421,7 @@ public:
     // Also reset current last DebugScope and current source line to unknown
     void setBuildPoint(Block* bp) {
         buildPoint = bp;
-        // TODO: Technically, change of build point should set line tracker dirty. But we'll have bad line info for
-        //       branch instructions. Commenting this for now because at least this matches the old behavior.
+        dirtyLineTracker = true;
         dirtyScopeTracker = true;
     }
     Block* getBuildPoint() const { return buildPoint; }
@@ -425,6 +429,11 @@ public:
     // Append an instruction to the end of the current build point.
     // Optionally, additional debug info instructions may also be prepended.
     void addInstruction(std::unique_ptr<Instruction> inst);
+
+    // Append an instruction to the end of the current build point without prepending any debug instructions.
+    // This is useful for insertion of some debug info instructions themselves or some control flow instructions
+    // that are attached to its predecessor instruction.
+    void addInstructionNoDebugInfo(std::unique_ptr<Instruction> inst);
 
     // Make the entry-point function. The returned pointer is only valid
     // for the lifetime of this builder.
@@ -442,7 +451,7 @@ public:
     void makeReturn(bool implicit, Id retVal = 0);
 
     // Initialize state and generate instructions for new lexical scope
-    void enterLexicalBlock(uint32_t line);
+    void enterLexicalBlock(uint32_t line, uint32_t column);
 
     // Set state and generate instructions to exit current lexical scope
     void leaveLexicalBlock();
@@ -639,7 +648,7 @@ public:
                     const std::vector<int>& valueToSegment, int defaultSegment, std::vector<Block*>& segmentBB);
 
     // Add a branch to the innermost switch's merge block.
-    void addSwitchBreak();
+    void addSwitchBreak(bool implicit);
 
     // Move to the next code segment, passing in the return argument in makeSwitch()
     void nextSwitchSegment(std::vector<Block*>& segmentBB, int segment);
@@ -861,7 +870,9 @@ public:
 
     void dump(std::vector<unsigned int>&) const;
 
-    void createBranch(Block* block);
+    // Add a branch to the target block.
+    // If set implicit, the branch instruction shouldn't have debug source location.
+    void createBranch(bool implicit, Block* block);
     void createConditionalBranch(Id condition, Block* thenBlock, Block* elseBlock);
     void createLoopMerge(Block* mergeBlock, Block* continueBlock, unsigned int control,
         const std::vector<unsigned int>& operands);
@@ -890,10 +901,13 @@ public:
     void createSelectionMerge(Block* mergeBlock, unsigned int control);
     void dumpSourceInstructions(std::vector<unsigned int>&) const;
     void dumpSourceInstructions(const spv::Id fileId, const std::string& text, std::vector<unsigned int>&) const;
-    void dumpInstructions(std::vector<unsigned int>&, const std::vector<std::unique_ptr<Instruction> >&) const;
+    template <class Range> void dumpInstructions(std::vector<unsigned int>& out, const Range& instructions) const;
     void dumpModuleProcesses(std::vector<unsigned int>&) const;
     spv::MemoryAccessMask sanitizeMemoryAccessForStorageClass(spv::MemoryAccessMask memoryAccess, StorageClass sc)
         const;
+    struct DecorationInstructionLessThan {
+        bool operator()(const std::unique_ptr<Instruction>& lhs, const std::unique_ptr<Instruction>& rhs) const;
+    };
 
     unsigned int spvVersion;     // the version of SPIR-V to emit in the header
     SourceLanguage sourceLang;
@@ -950,7 +964,7 @@ public:
     std::vector<std::unique_ptr<Instruction> > entryPoints;
     std::vector<std::unique_ptr<Instruction> > executionModes;
     std::vector<std::unique_ptr<Instruction> > names;
-    std::vector<std::unique_ptr<Instruction> > decorations;
+    std::set<std::unique_ptr<Instruction>, DecorationInstructionLessThan> decorations;
     std::vector<std::unique_ptr<Instruction> > constantsTypesGlobals;
     std::vector<std::unique_ptr<Instruction> > externals;
     std::vector<std::unique_ptr<Function> > functions;
@@ -990,6 +1004,6 @@ public:
     SpvBuildLogger* logger;
 };  // end Builder class
 
-};  // end spv namespace
+} // end spv namespace
 
 #endif // SpvBuilder_H
