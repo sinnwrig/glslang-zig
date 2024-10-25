@@ -345,6 +345,11 @@ GLSLANG_EXPORT glslang_shader_t* glslang_shader_create(const glslang_input_t* in
     shader->shader->setEnvTarget(c_shader_target_language(input->target_language),
                                  c_shader_target_language_version(input->target_language_version));
 
+#ifdef ENABLE_HLSL
+    if (input->hlsl_functionality_1)
+        shader->shader->setEnvTargetHlslFunctionality1();
+#endif
+
     if (input->entrypoint != nullptr)
         shader->shader->setEntryPoint(input->entrypoint);
 
