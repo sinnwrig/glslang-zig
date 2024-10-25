@@ -355,7 +355,8 @@ GLSLANG_EXPORT glslang_shader_t* glslang_shader_create(const glslang_input_t* in
         shader->shader->setSourceEntryPoint(input->source_entrypoint);
     }
 
-    shader->shader->setInvertY(input->invert_y);
+    if (input->invert_y)
+        shader->shader->setInvertY(true);
 
     return shader;
 }
