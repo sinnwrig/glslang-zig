@@ -491,6 +491,7 @@ public:
     GLSLANG_EXPORT void setResourceSetBinding(const std::vector<std::string>& base);
     GLSLANG_EXPORT void setAutoMapBindings(bool map);
     GLSLANG_EXPORT void setAutoMapLocations(bool map);
+    GLSLANG_EXPORT void setMapUnusedUniforms();
     GLSLANG_EXPORT void addUniformLocationOverride(const char* name, int loc);
     GLSLANG_EXPORT void setUniformLocationBase(int base);
     GLSLANG_EXPORT void setInvertY(bool invert);

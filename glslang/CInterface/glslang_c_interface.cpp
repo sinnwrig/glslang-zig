@@ -397,6 +397,10 @@ GLSLANG_EXPORT void glslang_shader_set_options(glslang_shader_t* shader, int opt
         shader->shader->setInvertY(true);
     }
 
+    if (options & GLSLANG_SHADER_MAP_UNUSED_UNIFORMS) {
+        shader->shader->setMapUnusedUniforms();
+    }
+    
 #ifdef ENABLE_HLSL
     if (options & GLSLANG_SHADER_HLSL_IO_MAPPING) {
         shader->shader->setHlslIoMapping(true);

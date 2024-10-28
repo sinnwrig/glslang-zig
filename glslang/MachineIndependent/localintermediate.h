@@ -344,6 +344,7 @@ public:
         numTaskEXTPayloads(0),
         autoMapBindings(false),
         autoMapLocations(false),
+        mapUnusedUniforms(false),
         flattenUniformArrays(false),
         useUnknownFormat(false),
         hlslOffsets(false),
@@ -1008,6 +1009,9 @@ public:
         else
             return pos->second;
     }
+
+    void setMapUnusedUniforms() { mapUnusedUniforms = true; }
+    bool getMapUnusedUniforms() const { return mapUnusedUniforms; }
 #ifdef ENABLE_HLSL
     void setHlslFunctionality1() { hlslFunctionality1 = true; }
     bool getHlslFunctionality1() const { return hlslFunctionality1; }
@@ -1237,6 +1241,7 @@ protected:
     std::vector<std::string> resourceSetBinding;
     bool autoMapBindings;
     bool autoMapLocations;
+    bool mapUnusedUniforms;
     bool flattenUniformArrays;
     bool useUnknownFormat;
     bool hlslOffsets;

@@ -72,6 +72,7 @@ public:
     virtual TResourceType getResourceType(const glslang::TType& type) = 0;
     bool doAutoBindingMapping() const;
     bool doAutoLocationMapping() const;
+    bool doMapUnusedUniforms() const;
     TSlotSet::iterator findSlot(int set, int slot);
     bool checkEmpty(int set, int slot);
     bool validateInOut(EShLanguage /*stage*/, TVarEntryInfo& /*ent*/) override { return true; }

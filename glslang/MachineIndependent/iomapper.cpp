@@ -885,6 +885,8 @@ bool TDefaultIoResolverBase::doAutoBindingMapping() const { return referenceInte
 
 bool TDefaultIoResolverBase::doAutoLocationMapping() const { return referenceIntermediate.getAutoMapLocations(); }
 
+bool TDefaultIoResolverBase::doMapUnusedUniforms() const { return referenceIntermediate.getMapUnusedUniforms(); }
+
 TDefaultIoResolverBase::TSlotSet::iterator TDefaultIoResolverBase::findSlot(int set, int slot) {
     return std::lower_bound(slots[set].begin(), slots[set].end(), slot);
 }
@@ -1230,7 +1232,7 @@ int TDefaultGlslIoResolver::resolveBinding(EShLanguage stage, TVarEntryInfo& ent
                     ent.newBinding = iter->second;
                 }
             }
-            if (!hasBinding && (ent.live && doAutoBindingMapping())) {
+            if (!hasBinding && ((ent.live || doMapUnusedUniforms()) && doAutoBindingMapping())) {
                 // find free slot, the caller did make sure it passes all vars with binding
                 // first and now all are passed that do not have a binding and needs one
                 int binding = getFreeSlot(resourceKey, getBaseBinding(stage, resource, set), numBindings);
@@ -1408,7 +1410,7 @@ struct TDefaultIoResolver : public TDefaultIoResolverBase {
             if (type.getQualifier().hasBinding()) {
                 return ent.newBinding = reserveSlot(
                            set, getBaseBinding(stage, resource, set) + type.getQualifier().layoutBinding, numBindings);
-            } else if (ent.live && doAutoBindingMapping()) {
+            } else if ((ent.live || doMapUnusedUniforms()) && doAutoBindingMapping()) {
                 // find free slot, the caller did make sure it passes all vars with binding
                 // first and now all are passed that do not have a binding and needs one
                 return ent.newBinding = getFreeSlot(set, getBaseBinding(stage, resource, set), numBindings);
@@ -1490,7 +1492,7 @@ struct TDefaultHlslIoResolver : public TDefaultIoResolverBase {
         if (resource < EResCount) {
             if (type.getQualifier().hasBinding()) {
                 return ent.newBinding = reserveSlot(set, getBaseBinding(stage, resource, set) + type.getQualifier().layoutBinding);
-            } else if (ent.live && doAutoBindingMapping()) {
+            } else if ((ent.live || doMapUnusedUniforms()) && doAutoBindingMapping()) {
                 // find free slot, the caller did make sure it passes all vars with binding
                 // first and now all are passed that do not have a binding and needs one
                 return ent.newBinding = getFreeSlot(set, getBaseBinding(stage, resource, set));
