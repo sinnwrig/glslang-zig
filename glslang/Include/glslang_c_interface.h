@@ -263,6 +263,8 @@ GLSLANG_EXPORT void glslang_shader_set_glsl_version(glslang_shader_t* shader, in
 GLSLANG_EXPORT void glslang_shader_set_default_uniform_block_set_and_binding(glslang_shader_t* shader, unsigned int set, unsigned int binding);
 GLSLANG_EXPORT void glslang_shader_set_default_uniform_block_name(glslang_shader_t* shader, const char *name);
 GLSLANG_EXPORT void glslang_shader_set_resource_set_binding(glslang_shader_t* shader, const char *const *bindings, unsigned int num_bindings);
+GLSLANG_EXPORT void glslang_shader_add_source_text(glslang_shader_t* shader, const char* text, size_t len);
+GLSLANG_EXPORT void glslang_shader_set_source_file(glslang_shader_t* shader, const char* file);
 GLSLANG_EXPORT int glslang_shader_preprocess(glslang_shader_t* shader, const glslang_input_t* input);
 GLSLANG_EXPORT int glslang_shader_parse(glslang_shader_t* shader, const glslang_input_t* input);
 GLSLANG_EXPORT const char* glslang_shader_get_preprocessed_code(glslang_shader_t* shader);

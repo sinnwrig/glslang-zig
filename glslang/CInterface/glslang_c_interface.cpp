@@ -396,6 +396,17 @@ GLSLANG_EXPORT void glslang_shader_set_options(glslang_shader_t* shader, int opt
     if (options & GLSLANG_SHADER_INVERT_Y) {
         shader->shader->setInvertY(true);
     }
+
+#ifdef ENABLE_HLSL
+    if (options & GLSLANG_SHADER_HLSL_IO_MAPPING) {
+        shader->shader->setHlslIoMapping(true);
+    }
+
+    if (options & GLSLANG_SHADER_HLSL_FLATTEN_UNIFORM_ARRAYS) {
+        shader->shader->setFlattenUniformArrays(true);
+    }
+
+#endif
 }
 
 GLSLANG_EXPORT void glslang_shader_set_glsl_version(glslang_shader_t* shader, int version)
@@ -420,6 +431,14 @@ GLSLANG_EXPORT void glslang_shader_set_resource_set_binding(glslang_shader_t* sh
     }
 
     shader->shader->setResourceSetBinding(shader->baseResourceSetBinding);
+}
+
+GLSLANG_EXPORT void glslang_shader_add_source_text(glslang_shader_t* shader, const char* text, size_t len) {
+    shader->shader->addSourceText(text, len);
+}
+
+GLSLANG_EXPORT void glslang_shader_set_source_file(glslang_shader_t* shader, const char* file) {
+    shader->shader->setSourceFile(file);
 }
 
 GLSLANG_EXPORT const char* glslang_shader_get_preprocessed_code(glslang_shader_t* shader)
