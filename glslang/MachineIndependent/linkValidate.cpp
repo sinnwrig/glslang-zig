@@ -132,6 +132,12 @@ static bool isSameSymbol(TIntermSymbol* symbol1, EShLanguage stage1, TIntermSymb
         if (isSameInterface(symbol1, stage1, symbol2, stage2)) {
             return symbol1->getType().getTypeName() == symbol2->getType().getTypeName();
         }
+    } else if (symbol1->getQualifier().semanticName && symbol2->getQualifier().semanticName) {
+        std::string sem1 = symbol1->getQualifier().semanticName;
+        std::string sem2 = symbol2->getQualifier().semanticName; 
+
+        if (sem1 == sem2)
+            return true;
     } else if (symbol1->getName() == symbol2->getName())
         return true;
     return false;
@@ -470,6 +476,7 @@ void TIntermediate::mergeModes(TInfoSink& infoSink, TIntermediate& unit)
     MERGE_TRUE(useStorageBuffer);
     MERGE_TRUE(invariantAll);
     MERGE_TRUE(hlslIoMapping);
+    MERGE_TRUE(mapUnusedUniforms);
 
     // TODO: sourceFile
     // TODO: sourceText
